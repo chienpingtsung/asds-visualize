@@ -1,219 +1,244 @@
 import {Component} from "react";
 import * as THREE from "three";
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
-import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader";
-import {load} from "three/examples/jsm/libs/opentype.module";
-import {FirstPersonControls} from "three/examples/jsm/controls/FirstPersonControls";
-import Stats from "three/examples/jsm/libs/stats.module";
 import {PointerLockControls} from "three/examples/jsm/controls/PointerLockControls";
+import {OBJLoader} from "three/examples/jsm/loaders/OBJLoader";
+import "./Visualize.css";
+
 
 class Visualize extends Component {
     componentDidMount() {
-        this.initScene();
+        this.cvsWidth = window.innerWidth / 2;
+        this.cvsHeight = window.innerHeight;
+
+        this.simuRenderer = new THREE.WebGLRenderer();
+        this.simuRenderer.setSize(this.cvsWidth, this.cvsHeight);
+        this.twinRenderer = new THREE.WebGLRenderer();
+        this.twinRenderer.setSize(this.cvsWidth, this.cvsHeight);
+
+        this.simuContainer = document.getElementById("simuContainer");
+        this.simuContainer.appendChild(this.simuRenderer.domElement);
+        this.twinContainer = document.getElementById("twinContainer");
+        this.twinContainer.appendChild(this.twinRenderer.domElement);
+
+        this.simuScene = new THREE.Scene();
+        this.simuScene.background = new THREE.Color(0xdcdcdc);
+        this.twinScene = new THREE.Scene();
+        this.twinScene.background = new THREE.Color(0xdcdcdc);
+
+        this.simuCamera = new THREE.PerspectiveCamera(50, this.cvsWidth / this.cvsHeight);
+        this.simuCameraControls = new OrbitControls(this.simuCamera, this.simuRenderer.domElement);
+        this.twinCamera = new THREE.PerspectiveCamera(50, this.cvsWidth / this.cvsHeight);
+        this.twinCameraControls = new OrbitControls(this.twinCamera, this.twinRenderer.domElement);
+
+        this.robotCamera = new THREE.PerspectiveCamera(65, 1920 / 1080);
+        this.robotCameraControls = new PointerLockControls(this.robotCamera, this.simuRenderer.domElement);
+        this.robotCameraHelper = new THREE.CameraHelper(this.robotCamera);
+
+        this.initSimuScene();
+        this.initTwinScene();
+
+        this.bindEvents();
+
+        this.animate();
     }
 
-    initScene() {
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+    renderThree() {
+        this.robotCameraHelper.visible = true;
+        this.simuRenderer.setViewport(0, 0, this.cvsWidth, this.cvsHeight);
+        this.simuRenderer.setScissor(0, 0, this.cvsWidth, this.cvsHeight);
+        this.simuRenderer.render(this.simuScene, this.simuCamera);
 
-        const container = document.getElementById("container");
-        container.appendChild(renderer.domElement);
+        this.robotCameraHelper.visible = false;
+        this.simuRenderer.setViewport(0, 0, 384, 216);
+        this.simuRenderer.setScissor(0, 0, 384, 216);
+        this.simuRenderer.render(this.simuScene, this.robotCamera);
 
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xeeeeee);
+        this.twinRenderer.render(this.twinScene, this.twinCamera);
+    }
 
-        const sceneCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-        sceneCamera.position.set(-10.8, 10.6, 2.7);
+    animate() {
+        const animateProxy = () => {
+            requestAnimationFrame(animateProxy);
 
-        const robotCamera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 1, 200);
-        robotCamera.position.set(3, 2, 3);
-        const robotCamHelper = new THREE.CameraHelper(robotCamera);
-        scene.add(robotCamHelper);
+            this.simuCameraControls.update();
+            this.twinCameraControls.update();
 
-        function render() {
-            renderer.setViewport(
-                Math.floor(window.innerWidth*0),
-                Math.floor(window.innerHeight*0),
-                Math.floor(window.innerWidth*1),
-                Math.floor(window.innerHeight*1)
-            );
-            renderer.setScissor(
-                Math.floor(window.innerWidth*0),
-                Math.floor(window.innerHeight*0),
-                Math.floor(window.innerWidth*1),
-                Math.floor(window.innerHeight*1)
-            );
-            renderer.setScissorTest(true);
-            renderer.render(scene, sceneCamera);
-
-            renderer.setViewport(
-                Math.floor(window.innerWidth*0),
-                Math.floor(window.innerHeight*0),
-                Math.floor(window.innerWidth*0.3),
-                Math.floor(window.innerHeight*0.3)
-            );
-            renderer.setScissor(
-                Math.floor(window.innerWidth*0),
-                Math.floor(window.innerHeight*0),
-                Math.floor(window.innerWidth*0.3),
-                Math.floor(window.innerHeight*0.3)
-            );
-            renderer.setScissorTest(true);
-            renderer.render(scene, robotCamera);
-        }
-
-        const sceneCamControls = new OrbitControls(sceneCamera, renderer.domElement);
-        const clock = new THREE.Clock();
-        let stats = new Stats();
-        container.appendChild(stats.dom);
-
-        const robotCamControls = new PointerLockControls(robotCamera, renderer.domElement);
-        const onKeyPress = (event) => {
-            switch (event.code) {
-                case 'KeyL':
-                    if (robotCamControls.isLocked === false) {
-                        robotCamControls.lock();
-                    }
-                    break;
+            if (this.robotCameraControls.isLocked) {
+                this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
+                this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
+                this.direction.y = Number(this.moveUp) - Number(this.moveDown);
+                this.direction.normalize();
+                this.robotCameraControls.moveRight(this.direction.x);
+                this.robotCameraControls.moveForward(this.direction.z);
+                this.robotCameraControls.getObject().position.y += this.direction.y;
             }
-        }
-        document.addEventListener('keypress', onKeyPress);
-        let moveForward = false;
-        let moveBackward = false;
-        let moveLeft = false;
-        let moveRight = false;
-        let moveUp = false;
-        let moveDown = false;
-        const direction = new THREE.Vector3();
-        const onKeyDown = (event) => {
-            switch (event.code) {
-                case 'KeyW':
-                    moveForward = true;
-                    break;
-                case 'KeyA':
-                    moveLeft = true;
-                    break;
-                case 'KeyS':
-                    moveBackward = true;
-                    break;
-                case 'KeyD':
-                    moveRight = true;
-                    break
-                case 'KeyR':
-                    moveUp = true;
-                    break
-                case 'KeyF':
-                    moveDown = true;
-                    break
-            }
-        }
-        const onKeyUp = (event) => {
-            switch (event.code) {
-                case 'KeyW':
-                    moveForward = false;
-                    break;
-                case 'KeyA':
-                    moveLeft = false;
-                    break;
-                case 'KeyS':
-                    moveBackward = false;
-                    break;
-                case 'KeyD':
-                    moveRight = false;
-                    break
-                case 'KeyR':
-                    moveUp = false;
-                    break
-                case 'KeyF':
-                    moveDown = false;
-                    break
-            }
-        }
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
 
-        const grid = new THREE.GridHelper(100, 50, 0x444444, 0x888888);
-        grid.material.opacity = 0.2;
-        grid.material.depthWrite = false;
+            this.renderThree();
+        }
+        animateProxy();
+    }
+
+    onWindowResize() {
+        this.cvsWidth = window.innerWidth / 2;
+        this.cvsHeight = window.innerHeight;
+
+        this.simuRenderer.setSize(this.cvsWidth, this.cvsHeight);
+        this.twinRenderer.setSize(this.cvsWidth, this.cvsHeight);
+
+        this.simuCamera.aspect = this.cvsWidth / this.cvsHeight;
+        this.simuCamera.updateProjectionMatrix();
+        this.twinCamera.aspect = this.cvsWidth / this.cvsHeight;
+        this.twinCamera.updateProjectionMatrix();
+
+        this.renderThree();
+    }
+
+    onKeyPress(event) {
+        switch (event.code) {
+            case "KeyL":
+                if (this.robotCameraControls.isLocked === false) {
+                    this.robotCameraControls.lock();
+                }
+                break;
+        }
+    }
+
+    onKeyDown(event) {
+        switch (event.code) {
+            case "KeyW":
+                this.moveForward = true;
+                break;
+            case "KeyS":
+                this.moveBackward = true;
+                break;
+            case "KeyA":
+                this.moveLeft = true;
+                break;
+            case "KeyD":
+                this.moveRight = true;
+                break;
+            case "KeyR":
+                this.moveUp = true;
+                break;
+            case "KeyF":
+                this.moveDown = true;
+                break;
+        }
+    }
+
+    onKeyUp(event) {
+        switch (event.code) {
+            case "KeyW":
+                this.moveForward = false;
+                break;
+            case "KeyS":
+                this.moveBackward = false;
+                break;
+            case "KeyA":
+                this.moveLeft = false;
+                break;
+            case "KeyD":
+                this.moveRight = false;
+                break;
+            case "KeyR":
+                this.moveUp = false;
+                break;
+            case "KeyF":
+                this.moveDown = false;
+                break;
+        }
+    }
+
+    bindEvents() {
+        window.addEventListener("resize", () => {this.onWindowResize();});
+        document.addEventListener("keypress", (event) => {this.onKeyPress(event);});
+        document.addEventListener("keydown", (event) => {this.onKeyDown(event);});
+        document.addEventListener("keyup", (event) => {this.onKeyUp(event);});
+    }
+
+    initSimuScene() {
+        this.simuRenderer.setScissorTest(true);
+
+        this.simuCamera.position.set(450, 450, 450);
+
+        this.robotCamera.position.set(40, 50, 90);
+        this.robotCamera.lookAt(0, 50, 90);
+
+        this.moveForward = false;
+        this.moveBackward = false;
+        this.moveLeft = false;
+        this.moveRight = false;
+        this.moveUp = false;
+        this.moveDown = false;
+        this.direction = new THREE.Vector3();
+
+        const scene = this.simuScene;
+
+        scene.add(this.robotCameraHelper);
+
+        const grid = new THREE.GridHelper(2000, 50);
         grid.material.transparent = true;
+        grid.material.opacity = 0.2;
         scene.add(grid);
 
-        const light = new THREE.PointLight(0xffffff, 1);
-        light.position.set( -20, 10, 30);
+        const light = new THREE.DirectionalLight();
+        light.position.set(100, 100, 0);
         scene.add(light);
 
-        const loader = new GLTFLoader().setPath('boeing/');
-        loader.load('boeing-737-300-plane-1.gltf', (gltf) => {
-            const texture = new THREE.TextureLoader().load('boeing/wallhaven-v96gkp.jpg', (texture) => {
-                texture.encoding = THREE.sRGBEncoding;
-                texture.flipY = false;
-                texture.needsUpdate = true;
-                const material = new THREE.MeshLambertMaterial({map: texture});
-                gltf.scene.children[0].material = material;
-                gltf.scene.children[0].material.needsUpdate = true;
-                gltf.scene.traverse((child) => {
-                    if (child.isMesh) {
-                        child.material.emissive = child.material.color;
-                        child.material.emissiveMap = child.material.map;
+        const loader = new OBJLoader();
+        loader.load(
+            "old/boeing1.obj",
+            (object) => {
+                object.position.set(0, 71, 0);
+                object.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        child.material.map = new THREE.TextureLoader().load("boeing/wallhaven-v96gkp.jpg");
                     }
                 });
-            });
-            scene.add(gltf.scene);
-            render();
-        });
-
-
-
-        function animate() {
-            requestAnimationFrame(animate);
-            sceneCamControls.update();
-
-            if (robotCamControls.isLocked) {
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.y = Number(moveUp) - Number(moveDown);
-                direction.normalize();
-
-                robotCamControls.moveRight(direction.x * 0.1);
-                robotCamControls.moveForward(direction.z * 0.1);
-                robotCamControls.getObject().position.y += direction.y * 0.1;
+                scene.add(object);
             }
+        );
+    }
 
-            render();
-            stats.update();
-        }
+    initTwinScene() {
+        this.twinCamera.position.set(450, 450, 450);
 
-        animate();
+        const scene = this.twinScene;
 
-        function onWindowResize() {
-            sceneCamera.aspect = window.innerWidth / window.innerHeight;
-            sceneCamera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            render();
-        }
+        const grid = new THREE.GridHelper(2000, 50);
+        grid.material.transparent = true;
+        grid.material.opacity = 0.2;
+        scene.add(grid);
 
-        window.addEventListener('resize', onWindowResize);
+        const light = new THREE.AmbientLight();
+        light.intensity = 0.9;
+        scene.add(light);
 
-        let changeFocus = true;
-
-        function onDocumentMouseDown(event) {
-            changeFocus = false;
-        }
-        function onDocumentMouseUp(event) {
-            changeFocus = true;
-        }
-
-        document.addEventListener('mousedown', onDocumentMouseDown);
-        document.addEventListener('mouseup', onDocumentMouseUp);
+        const loader = new OBJLoader();
+        loader.load(
+            "old/boeing1.obj",
+            (object) => {
+                object.position.set(0, 71, 0);
+                object.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        child.material.map = new THREE.TextureLoader().load("boeing/wallhaven-v96gkp.jpg");
+                    }
+                });
+                scene.add(object);
+            }
+        );
     }
 
     render() {
         return(
             <div>
-                <div id="container"></div>
+                <div id="simuContainer"></div>
+                <div id="twinContainer"></div>
             </div>
         );
     }
 }
+
 
 export default Visualize;

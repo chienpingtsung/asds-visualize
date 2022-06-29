@@ -1,0 +1,4 @@
+#simuContainer, #twinContainer {
+    display: inline-block;
+    float: left;
+}
