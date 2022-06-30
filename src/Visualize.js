@@ -35,6 +35,8 @@ class Visualize extends Component {
         this.robotCameraControls = new PointerLockControls(this.robotCamera, this.simuRenderer.domElement);
         this.robotCameraHelper = new THREE.CameraHelper(this.robotCamera);
 
+        this.raycaster = new THREE.Raycaster();
+
         this.initSimuScene();
         this.initTwinScene();
 
@@ -94,12 +96,41 @@ class Visualize extends Component {
         this.renderThree();
     }
 
+    capture() {
+        const point = this.robotCameraHelper.geometry.getAttribute("position").clone();
+        point.applyMatrix4(this.robotCameraHelper.matrix);
+        const quadUV = [];
+        for (let i = 0; i < 4; i++) {
+            const ori = new THREE.Vector3(point.getX(this.nearMap[i]),
+                                          point.getY(this.nearMap[i]),
+                                          point.getZ(this.nearMap[i]));
+            const dir = new THREE.Vector3(point.getX(this.farMap[i]),
+                                          point.getY(this.farMap[i]),
+                                          point.getZ(this.farMap[i])).sub(ori).normalize();
+            this.raycaster.set(ori, dir);
+            const inter = this.raycaster.intersectObject(this.simuObject);
+            if (inter.length > 0) {
+                quadUV.push(inter[0]["uv"]);
+            }
+        }
+
+        if (quadUV.length < 4) {
+            alert("Incomplete camera constraints have only " + quadUV.length + " intersections.");
+            return;
+        }
+
+
+    }
+
     onKeyPress(event) {
         switch (event.code) {
             case "KeyL":
                 if (this.robotCameraControls.isLocked === false) {
                     this.robotCameraControls.lock();
                 }
+                break;
+            case "Space":
+                this.capture();
                 break;
         }
     }
@@ -175,6 +206,12 @@ class Visualize extends Component {
 
         const scene = this.simuScene;
 
+        this.nearMap = [];
+        this.farMap = [];
+        for (let i = 1; i < 5; i++) {
+            this.nearMap.push(this.robotCameraHelper.pointMap["n" + i][0]);
+            this.farMap.push(this.robotCameraHelper.pointMap["f" + i][0]);
+        }
         scene.add(this.robotCameraHelper);
 
         const grid = new THREE.GridHelper(2000, 50);
@@ -197,6 +234,7 @@ class Visualize extends Component {
                     }
                 });
                 scene.add(object);
+                this.simuObject = object;
             }
         );
     }
