@@ -11,9 +11,9 @@ class Visualize extends Component {
         this.cvsWidth = window.innerWidth / 2;
         this.cvsHeight = window.innerHeight;
 
-        this.simuRenderer = new THREE.WebGLRenderer();
+        this.simuRenderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
         this.simuRenderer.setSize(this.cvsWidth, this.cvsHeight);
-        this.twinRenderer = new THREE.WebGLRenderer();
+        this.twinRenderer = new THREE.WebGLRenderer({antialias: true});
         this.twinRenderer.setSize(this.cvsWidth, this.cvsHeight);
 
         this.simuContainer = document.getElementById("simuContainer");
@@ -36,6 +36,8 @@ class Visualize extends Component {
         this.robotCameraHelper = new THREE.CameraHelper(this.robotCamera);
 
         this.raycaster = new THREE.Raycaster();
+
+        this.initTexture();
 
         this.initSimuScene();
         this.initTwinScene();
@@ -119,7 +121,29 @@ class Visualize extends Component {
             return;
         }
 
+        const imageData = this.simuRenderer.domElement.toDataURL();
+        const Xs = [];
+        const Ys = [];
+        for (let i = 0; i < 4; i++) {
+            Xs.push(quadUV[i].x);
+            Ys.push(1 - quadUV[i].y);
+        }
+        this.image = new Image();
+        this.image.src = imageData;
+        this.image.onload = () => {
+            this.textureContext.drawImage(this.image, 0, 735, 384, 216,
+                this.textureCanvas.width * Math.min.apply(0, Xs),
+                this.textureCanvas.height * Math.min.apply(0, Ys),
+                this.textureCanvas.width * (Math.max.apply(0, Xs) - Math.min.apply(0, Xs)),
+                this.textureCanvas.height * (Math.max.apply(0, Ys) - Math.min.apply(0, Ys)));
 
+            this.twinObject.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    child.material.map = new THREE.TextureLoader().load(this.textureCanvas.toDataURL());
+                    child.material.needsUpdate = true;
+                }
+            })
+        }
     }
 
     onKeyPress(event) {
@@ -186,6 +210,15 @@ class Visualize extends Component {
         document.addEventListener("keypress", (event) => {this.onKeyPress(event);});
         document.addEventListener("keydown", (event) => {this.onKeyDown(event);});
         document.addEventListener("keyup", (event) => {this.onKeyUp(event);});
+    }
+
+    initTexture() {
+        this.textureCanvas = document.createElement("canvas");
+        this.textureCanvas.width = 5000;
+        this.textureCanvas.height = 5000;
+        this.textureContext = this.textureCanvas.getContext("2d");
+        // const container = document.getElementById("cvs");
+        // container.appendChild(this.textureCanvas);
     }
 
     initSimuScene() {
@@ -258,22 +291,19 @@ class Visualize extends Component {
             "old/boeing1.obj",
             (object) => {
                 object.position.set(0, 71, 0);
-                object.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        child.material.map = new THREE.TextureLoader().load("boeing/wallhaven-v96gkp.jpg");
-                    }
-                });
                 scene.add(object);
+                this.twinObject = object;
             }
         );
     }
 
     render() {
-        return(
+        return(<div>
+            <div id="cvs"></div>
             <div>
                 <div id="simuContainer"></div>
                 <div id="twinContainer"></div>
-            </div>
+            </div></div>
         );
     }
 }
